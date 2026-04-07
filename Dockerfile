@@ -26,7 +26,8 @@ RUN python3 -m venv venv \
     && . venv/bin/activate \
     && pip install --upgrade pip wheel \
     && pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 \
-    && pip install -r requirements.txt
+    && pip install -r requirements.txt \
+    && pip install tiktoken sentencepiece
 
 WORKDIR /root/ComfyUI/custom_nodes
 RUN git clone https://github.com/Comfy-Org/ComfyUI-Manager.git \
@@ -71,8 +72,11 @@ RUN npm install
 RUN mkdir -p \
     /root/ComfyUI/models/checkpoints/flux \
     /root/ComfyUI/models/vae/qwen \
+    /root/ComfyUI/models/vae/zit \
     /root/ComfyUI/models/clip/qwen \
+    /root/ComfyUI/models/text_encoders/zit \
     /root/ComfyUI/models/diffusion_models/gguf \
+    /root/ComfyUI/models/diffusion_models \
     /root/ComfyUI/models/loras/qwen \
     /root/ComfyUI/models/clip_vision \
     /root/ComfyUI/models/model_patches \
