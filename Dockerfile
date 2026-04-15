@@ -46,12 +46,11 @@ WORKDIR /root/ComfyUI/custom_nodes
 COPY custom_nodes.txt /tmp/custom_nodes.txt
 RUN set -eu; \
     grep -Ev '^[[:space:]]*(#|$)' /tmp/custom_nodes.txt \
-      | xargs -P 8 -I {} sh -c 'set -eu; \
-          url=$(echo "{}" | awk "{print \$1}"); \
-          dir=$(echo "{}" | awk "{print \$2}"); \
-          [ -z "$dir" ] && dir=$(basename "$url" .git); \
-          echo "clone $url -> $dir"; \
-          git clone --depth=1 "$url" "$dir"'; \
+      | while read -r url dir; do \
+            [ -n "$dir" ] || dir=$(basename "$url" .git); \
+            printf '%s\0%s\0' "$url" "$dir"; \
+        done \
+      | xargs -0 -n 2 -P 8 git clone --depth=1; \
     rm /tmp/custom_nodes.txt
 
 # Patch ComfyUI-NAG for newer ComfyUI (chroma classes moved to flux)
