@@ -44,14 +44,23 @@ RUN . /root/ComfyUI/venv/bin/activate \
 
 WORKDIR /root/ComfyUI/custom_nodes
 COPY custom_nodes.txt /tmp/custom_nodes.txt
-RUN set -eu; \
+RUN set -u; \
+    fail_log=/tmp/clone-fail.log; \
+    : > "$fail_log"; \
     grep -Ev '^[[:space:]]*(#|$)' /tmp/custom_nodes.txt \
       | while read -r url dir; do \
             [ -n "$dir" ] || dir=$(basename "$url" .git); \
             printf '%s\0%s\0' "$url" "$dir"; \
         done \
-      | xargs -0 -n 2 -P 8 git clone --depth=1; \
-    rm /tmp/custom_nodes.txt
+      | xargs -0 -n 2 -P 8 sh -c \
+            'git clone --depth=1 "$1" "$2" || echo "$1" >> /tmp/clone-fail.log' _; \
+    if [ -s "$fail_log" ]; then \
+        echo "=================================================="; \
+        echo "WARNING: these custom nodes failed to clone:"; \
+        cat "$fail_log"; \
+        echo "=================================================="; \
+    fi; \
+    rm -f "$fail_log" /tmp/custom_nodes.txt
 
 # Patch ComfyUI-NAG for newer ComfyUI (chroma classes moved to flux)
 RUN sed -i 's/from comfy.ldm.chroma.layers import DoubleStreamBlock, SingleStreamBlock/from comfy.ldm.flux.layers import DoubleStreamBlock, SingleStreamBlock/' \

@@ -23,7 +23,6 @@ https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.git
 https://github.com/crystian/ComfyUI-Crystools.git
 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git
 https://github.com/Suzie1/ComfyUI_Comfyroll_CustomNodes.git
-https://github.com/Gourieff/comfyui-reactor-node.git
 https://github.com/chrisgoringe/cg-use-everywhere.git
 https://github.com/Derfuu/Derfuu_ComfyUI_ModdedNodes.git
 https://github.com/giriss/comfy-image-saver.git
