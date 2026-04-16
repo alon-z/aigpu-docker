@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-venv python3-dev python3-pip \
         build-essential libgl1 libglib2.0-0 aria2 rclone tmux \
         fonts-dejavu-core fonts-liberation vim \
+        # Pre-install packages the cloud provider injects at startup
+        openssh-server openssh-client htop nano xauth \
+        lsb-release systemd systemd-sysv \
     && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
     && apt-get install -y nodejs \
     && curl -fsSL https://tailscale.com/install.sh | sh \
