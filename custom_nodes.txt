@@ -49,3 +49,6 @@ https://github.com/Alectriciti/comfyui-adaptiveprompts.git
 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git
 https://github.com/ClownsharkBatwing/RES4LYF.git
 https://github.com/PGCRT/CRT-Nodes.git
+https://github.com/jamesWalker55/comfyui-various.git
+https://github.com/DoctorDiffusion/ComfyUI-MediaMixer.git
+https://github.com/tritant/ComfyUI_Custom_Switch.git
