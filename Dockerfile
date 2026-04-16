@@ -1,29 +1,30 @@
-FROM nvidia/cuda:13.2.0-devel-ubuntu24.04
+# syntax=docker/dockerfile:1.6
+
+# =======================================================
+# Stage 1: builder — compile everything on CUDA devel
+# Cross-compiles SageAttention for Blackwell sm_120.
+# No GPU required at build time.
+# =======================================================
+FROM nvidia/cuda:13.2.0-devel-ubuntu24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# -------------------------------------------------------
-# System dependencies
-# -------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl wget git ca-certificates gnupg \
         python3 python3-venv python3-dev python3-pip \
-        build-essential libgl1 libglib2.0-0 aria2 rclone tmux \
-        fonts-dejavu-core fonts-liberation vim \
-        # Pre-install packages the cloud provider injects at startup
-        openssh-server openssh-client htop nano xauth \
-        lsb-release systemd systemd-sysv \
+        build-essential \
     && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
-    && apt-get install -y nodejs \
-    && curl -fsSL https://tailscale.com/install.sh | sh \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # -------------------------------------------------------
-# ComfyUI + custom nodes
+# ComfyUI
 # -------------------------------------------------------
 WORKDIR /root
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git
+RUN git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git
 
 WORKDIR /root/ComfyUI
 RUN python3 -m venv venv \
@@ -33,18 +34,22 @@ RUN python3 -m venv venv \
     && pip install -r requirements.txt \
     && pip install tiktoken sentencepiece triton
 
-# SageAttention (compile from source for Blackwell sm_120)
-# Bypass CUDA version check (system has 13.2, PyTorch built with 12.8)
+# SageAttention (compile from source for Blackwell sm_120).
+# Bypass the torch CUDA-version check (system has 13.2, torch built with 12.8).
 RUN . /root/ComfyUI/venv/bin/activate \
-    && TORCH_EXT=$(python3 -c "import torch.utils.cpp_extension; print(torch.utils.cpp_extension.__file__)" 2>/dev/null) \
+    && TORCH_EXT=$(python3 -c "import torch.utils.cpp_extension; print(torch.utils.cpp_extension.__file__)") \
     && cp "$TORCH_EXT" "${TORCH_EXT}.bak" \
     && sed -i 's/raise RuntimeError(CUDA_MISMATCH_MESSAGE/pass #raise RuntimeError(CUDA_MISMATCH_MESSAGE/' "$TORCH_EXT" \
-    && git clone https://github.com/thu-ml/SageAttention.git /tmp/SageAttention \
+    && git clone --depth=1 https://github.com/thu-ml/SageAttention.git /tmp/SageAttention \
     && cd /tmp/SageAttention \
     && TORCH_CUDA_ARCH_LIST="12.0" pip install --no-build-isolation . \
     && cp "${TORCH_EXT}.bak" "$TORCH_EXT" \
+    && rm "${TORCH_EXT}.bak" \
     && cd /root && rm -rf /tmp/SageAttention
 
+# -------------------------------------------------------
+# Custom nodes
+# -------------------------------------------------------
 WORKDIR /root/ComfyUI/custom_nodes
 COPY custom_nodes.txt /tmp/custom_nodes.txt
 RUN set -u; \
@@ -81,10 +86,10 @@ RUN . /root/ComfyUI/venv/bin/activate \
 # ai-toolkit (ostris)
 # -------------------------------------------------------
 WORKDIR /root
-RUN git clone https://github.com/ostris/ai-toolkit.git
+RUN git clone --depth=1 https://github.com/ostris/ai-toolkit.git
 
 WORKDIR /root/ai-toolkit
-RUN git submodule update --init --recursive \
+RUN git submodule update --init --recursive --depth=1 \
     && python3 -m venv venv \
     && . venv/bin/activate \
     && pip install --upgrade pip wheel \
@@ -93,11 +98,41 @@ RUN git submodule update --init --recursive \
     && pip install --upgrade accelerate transformers diffusers huggingface_hub
 
 WORKDIR /root/ai-toolkit/ui
-RUN npm install
+RUN npm install \
+    && npm cache clean --force
 
 # -------------------------------------------------------
-# Create models directory structure
+# Slim the tree before copying into the runtime stage
 # -------------------------------------------------------
+RUN find /root -type d -name '.git'        -prune -exec rm -rf {} + \
+    && find /root -type d -name '__pycache__' -prune -exec rm -rf {} + \
+    && find /root -type f -name '*.pyc'             -delete \
+    && rm -rf /root/.cache /root/.npm /tmp/*
+
+# =======================================================
+# Stage 2: runtime — slim CUDA runtime base
+# =======================================================
+FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl wget git ca-certificates gnupg \
+        python3 python3-venv python3-pip \
+        libgl1 libglib2.0-0 aria2 rclone tmux \
+        fonts-dejavu-core fonts-liberation vim \
+        # cloud-provider injected at startup
+        openssh-server openssh-client htop nano xauth \
+        lsb-release systemd systemd-sysv \
+    && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && curl -fsSL https://tailscale.com/install.sh | sh \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /root/ComfyUI    /root/ComfyUI
+COPY --from=builder /root/ai-toolkit /root/ai-toolkit
+
 RUN mkdir -p \
     /root/ComfyUI/models/checkpoints/flux \
     /root/ComfyUI/models/vae/qwen \
