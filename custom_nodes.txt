@@ -39,6 +39,7 @@ https://github.com/miosp/ComfyUI-FBCNN.git
 https://github.com/huchukato/ComfyUI-QwenVL-Mod.git
 https://github.com/skatardude10/ComfyUI-Optical-Realism.git
 https://github.com/Slartibart23/comfyui-sentence-filter.git
+https://github.com/zhangp365/ComfyUI-utils-nodes.git
 
 # --- video/audio/prompts ---
 https://github.com/kijai/ComfyUI-WanVideoWrapper.git
