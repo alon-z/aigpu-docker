@@ -2,6 +2,7 @@ name: Build and push Docker image
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -20,9 +21,9 @@ jobs:
       matrix:
         include:
           - target: pod
-            tag: latest
+            rolling: latest
           - target: serverless
-            tag: serverless
+            rolling: serverless
 
     steps:
       - uses: actions/checkout@v4
@@ -51,9 +52,22 @@ jobs:
         id: img
         run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
 
-      # Matrix jobs run in parallel. Each target writes to its own buildcache
-      # tag and reads from both, so the shared comfy-builder stage compiled by
-      # a previous run is reused by both targets on subsequent runs.
+      # Produces:
+      #   Immutable per-commit:   <target>-<short-sha>        (every push)
+      #   Immutable semver:       <target>-vX.Y.Z             (on git tag vX.Y.Z)
+      #                           <target>-vX.Y               (on git tag vX.Y.Z)
+      #   Rolling (main only):    latest | serverless
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
+          tags: |
+            type=sha,prefix=${{ matrix.target }}-,format=short
+            type=semver,prefix=${{ matrix.target }}-,pattern={{version}}
+            type=semver,prefix=${{ matrix.target }}-,pattern={{major}}.{{minor}}
+            type=raw,value=${{ matrix.rolling }},enable={{is_default_branch}}
+
       - name: Build and push ${{ matrix.target }}
         uses: docker/build-push-action@v5
         with:
@@ -61,11 +75,12 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           platforms: linux/amd64
-          tags: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }}
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-pod
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-serverless
-            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.tag }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.rolling }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }},mode=max,compression=zstd,image-manifest=true,oci-mediatypes=true
           provenance: false
