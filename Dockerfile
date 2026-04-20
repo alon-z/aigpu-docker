@@ -1,11 +1,9 @@
 # syntax=docker/dockerfile:1.6
 
 # =======================================================
-# Stage 1: builder — compile everything on CUDA devel
-# Cross-compiles SageAttention for Blackwell sm_120.
-# No GPU required at build time.
+# Stage 1: base-builder — apt deps shared by builders
 # =======================================================
-FROM nvidia/cuda:13.2.0-devel-ubuntu24.04 AS builder
+FROM nvidia/cuda:13.2.0-devel-ubuntu24.04 AS base-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -13,16 +11,17 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl wget git ca-certificates gnupg \
+        curl wget git ca-certificates \
         python3 python3-venv python3-dev python3-pip \
         build-essential \
-    && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# -------------------------------------------------------
-# ComfyUI
-# -------------------------------------------------------
+# =======================================================
+# Stage 2: comfy-builder — ComfyUI + SageAttention + nodes
+# Cross-compiles SageAttention for Blackwell sm_120.
+# =======================================================
+FROM base-builder AS comfy-builder
+
 WORKDIR /root
 RUN git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git
 
@@ -32,7 +31,8 @@ RUN python3 -m venv venv \
     && pip install --upgrade pip wheel \
     && pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu128 \
     && pip install -r requirements.txt \
-    && pip install tiktoken sentencepiece triton
+    && pip install tiktoken sentencepiece triton \
+    && pip install runpod requests websocket-client
 
 # SageAttention (compile from source for Blackwell sm_120).
 # Bypass the torch CUDA-version check (system has 13.2, torch built with 12.8).
@@ -47,9 +47,7 @@ RUN . /root/ComfyUI/venv/bin/activate \
     && rm "${TORCH_EXT}.bak" \
     && cd /root && rm -rf /tmp/SageAttention
 
-# -------------------------------------------------------
 # Custom nodes
-# -------------------------------------------------------
 WORKDIR /root/ComfyUI/custom_nodes
 COPY custom_nodes.txt /tmp/custom_nodes.txt
 RUN set -u; \
@@ -82,9 +80,21 @@ RUN . /root/ComfyUI/venv/bin/activate \
         [ -f "$d/install.py" ] && python3 "$d/install.py" 2>/dev/null || true; \
     done
 
-# -------------------------------------------------------
-# ai-toolkit (ostris)
-# -------------------------------------------------------
+RUN find /root/ComfyUI -type d -name '.git'        -prune -exec rm -rf {} + \
+    && find /root/ComfyUI -type d -name '__pycache__' -prune -exec rm -rf {} + \
+    && find /root/ComfyUI -type f -name '*.pyc'             -delete \
+    && rm -rf /root/.cache /tmp/*
+
+# =======================================================
+# Stage 3: aitoolkit-builder — ai-toolkit (pod only)
+# =======================================================
+FROM base-builder AS aitoolkit-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /root
 RUN git clone --depth=1 https://github.com/ostris/ai-toolkit.git
 
@@ -101,18 +111,54 @@ WORKDIR /root/ai-toolkit/ui
 RUN npm install \
     && npm cache clean --force
 
-# -------------------------------------------------------
-# Slim the tree before copying into the runtime stage
-# -------------------------------------------------------
-RUN find /root -type d -name '.git'        -prune -exec rm -rf {} + \
-    && find /root -type d -name '__pycache__' -prune -exec rm -rf {} + \
-    && find /root -type f -name '*.pyc'             -delete \
+RUN find /root/ai-toolkit -type d -name '.git'        -prune -exec rm -rf {} + \
+    && find /root/ai-toolkit -type d -name '__pycache__' -prune -exec rm -rf {} + \
+    && find /root/ai-toolkit -type f -name '*.pyc'             -delete \
     && rm -rf /root/.cache /root/.npm /tmp/*
 
 # =======================================================
-# Stage 2: runtime — slim CUDA runtime base
+# Stage 4a: serverless — slim runtime for RunPod serverless
+#   build with: docker build --target serverless -t <img>:serverless .
 # =======================================================
-FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04
+FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04 AS serverless
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv \
+        libgl1 libglib2.0-0 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=comfy-builder /root/ComfyUI /root/ComfyUI
+
+RUN mkdir -p \
+    /root/ComfyUI/models/checkpoints/flux \
+    /root/ComfyUI/models/vae/qwen \
+    /root/ComfyUI/models/vae/zit \
+    /root/ComfyUI/models/clip/qwen \
+    /root/ComfyUI/models/text_encoders/zit \
+    /root/ComfyUI/models/diffusion_models/gguf \
+    /root/ComfyUI/models/diffusion_models \
+    /root/ComfyUI/models/loras/qwen \
+    /root/ComfyUI/models/clip_vision \
+    /root/ComfyUI/models/model_patches \
+    /root/ComfyUI/models/upscale_models \
+    /root/ComfyUI/models/ultralytics/bbox
+
+COPY serverless/handler.py     /handler.py
+COPY serverless/start.sh       /start.sh
+COPY serverless/test_input.json /test_input.json
+RUN chmod +x /start.sh
+
+WORKDIR /
+CMD ["/start.sh"]
+
+# =======================================================
+# Stage 4b: pod — full-featured runtime (default build target)
+# =======================================================
+FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04 AS pod
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -130,8 +176,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://tailscale.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /root/ComfyUI    /root/ComfyUI
-COPY --from=builder /root/ai-toolkit /root/ai-toolkit
+COPY --from=comfy-builder    /root/ComfyUI    /root/ComfyUI
+COPY --from=aitoolkit-builder /root/ai-toolkit /root/ai-toolkit
 
 RUN mkdir -p \
     /root/ComfyUI/models/checkpoints/flux \
