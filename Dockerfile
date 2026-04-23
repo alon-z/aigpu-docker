@@ -56,6 +56,9 @@ RUN . /root/ComfyUI/venv/bin/activate \
     && sed -i 's/raise RuntimeError(CUDA_MISMATCH_MESSAGE/pass #raise RuntimeError(CUDA_MISMATCH_MESSAGE/' "$TORCH_EXT" \
     && git clone --depth=1 https://github.com/thu-ml/SageAttention.git /tmp/SageAttention \
     && cd /tmp/SageAttention \
+    # Drop -fopenmp / -lgomp from CXX_FLAGS: CUDA 12.4's nvcc rejects them,
+    # and the code uses no OpenMP pragmas or symbols so they're dead weight.
+    && sed -i 's/"-fopenmp", //; s/"-lgomp", //' setup.py \
     && TORCH_CUDA_ARCH_LIST="${TORCH_ARCH_LIST}" pip install --no-build-isolation . \
     && cp "${TORCH_EXT}.bak" "$TORCH_EXT" \
     && rm "${TORCH_EXT}.bak" \
