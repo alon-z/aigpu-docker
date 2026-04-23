@@ -57,3 +57,4 @@ https://github.com/Gourieff/ComfyUI-ReActor.git
 https://github.com/ChangeTheConstants/SeedVarianceEnhancer.git
 https://github.com/aria1th/ComfyUI-LogicUtils.git
 https://github.com/chrisfreilich/virtuoso-nodes.git
+https://github.com/Jonseed/ComfyUI-Detail-Daemon.git
