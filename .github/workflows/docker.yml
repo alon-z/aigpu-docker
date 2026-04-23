@@ -20,10 +20,38 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Default variant: CUDA 13.2 / cu128, Blackwell (sm_120).
+          # Requires host driver >= 580.
           - target: pod
             rolling: latest
+            tag_suffix: ''
+            cuda_version: 13.2.0
+            ubuntu_version: '24.04'
+            torch_index: cu128
+            torch_arch_list: '8.9 12.0'
           - target: serverless
             rolling: serverless
+            tag_suffix: ''
+            cuda_version: 13.2.0
+            ubuntu_version: '24.04'
+            torch_index: cu128
+            torch_arch_list: '8.9 12.0'
+          # cu124 variant: runs on hosts with CUDA 12.4 drivers (e.g. 550.x).
+          # Targets Ada (sm_89, 4090). Tagged with a -cu124 suffix.
+          - target: pod
+            rolling: latest
+            tag_suffix: '-cu124'
+            cuda_version: 12.4.1
+            ubuntu_version: '22.04'
+            torch_index: cu124
+            torch_arch_list: '8.9'
+          - target: serverless
+            rolling: serverless
+            tag_suffix: '-cu124'
+            cuda_version: 12.4.1
+            ubuntu_version: '22.04'
+            torch_index: cu124
+            torch_arch_list: '8.9'
 
     steps:
       - uses: actions/checkout@v4
@@ -53,34 +81,39 @@ jobs:
         run: echo "name=${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
 
       # Produces:
-      #   Immutable per-commit:   <target>-<short-sha>        (every push)
-      #   Immutable semver:       <target>-vX.Y.Z             (on git tag vX.Y.Z)
-      #                           <target>-vX.Y               (on git tag vX.Y.Z)
-      #   Rolling (main only):    latest | serverless
+      #   Immutable per-commit:   <target>-<short-sha>[-cu124]    (every push)
+      #   Immutable semver:       <target>-vX.Y.Z[-cu124]         (on tag vX.Y.Z)
+      #                           <target>-vX.Y[-cu124]           (on tag vX.Y.Z)
+      #   Rolling (main only):    latest | serverless | latest-cu124 | serverless-cu124
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
           tags: |
-            type=sha,prefix=${{ matrix.target }}-,format=short
-            type=semver,prefix=${{ matrix.target }}-,pattern={{version}}
-            type=semver,prefix=${{ matrix.target }}-,pattern={{major}}.{{minor}}
-            type=raw,value=${{ matrix.rolling }},enable={{is_default_branch}}
+            type=sha,prefix=${{ matrix.target }}-,suffix=${{ matrix.tag_suffix }},format=short
+            type=semver,prefix=${{ matrix.target }}-,suffix=${{ matrix.tag_suffix }},pattern={{version}}
+            type=semver,prefix=${{ matrix.target }}-,suffix=${{ matrix.tag_suffix }},pattern={{major}}.{{minor}}
+            type=raw,value=${{ matrix.rolling }}${{ matrix.tag_suffix }},enable={{is_default_branch}}
 
-      - name: Build and push ${{ matrix.target }}
+      - name: Build and push ${{ matrix.target }}${{ matrix.tag_suffix }}
         uses: docker/build-push-action@v5
         with:
           context: .
           target: ${{ matrix.target }}
           push: true
           platforms: linux/amd64
+          build-args: |
+            CUDA_VERSION=${{ matrix.cuda_version }}
+            UBUNTU_VERSION=${{ matrix.ubuntu_version }}
+            TORCH_INDEX=${{ matrix.torch_index }}
+            TORCH_ARCH_LIST=${{ matrix.torch_arch_list }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }}
-            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-pod
-            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-serverless
-            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.rolling }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }},mode=max,compression=zstd,image-manifest=true,oci-mediatypes=true
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }}${{ matrix.tag_suffix }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-pod${{ matrix.tag_suffix }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-serverless${{ matrix.tag_suffix }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.rolling }}${{ matrix.tag_suffix }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }}${{ matrix.tag_suffix }},mode=max,compression=zstd,image-manifest=true,oci-mediatypes=true
           provenance: false
