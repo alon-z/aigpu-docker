@@ -100,39 +100,7 @@ RUN find /root/ComfyUI -type d -name '.git'        -prune -exec rm -rf {} + \
     && rm -rf /root/.cache /tmp/*
 
 # =======================================================
-# Stage 3: aitoolkit-builder — ai-toolkit (pod only)
-# =======================================================
-FROM base-builder AS aitoolkit-builder
-ARG TORCH_INDEX
-
-RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /root
-RUN git clone --depth=1 https://github.com/ostris/ai-toolkit.git
-
-WORKDIR /root/ai-toolkit
-RUN git submodule update --init --recursive --depth=1 \
-    && python3 -m venv venv \
-    && . venv/bin/activate \
-    && pip install --upgrade pip wheel \
-    && pip install torch torchvision torchaudio --extra-index-url "https://download.pytorch.org/whl/${TORCH_INDEX}" \
-    && pip install -r requirements.txt \
-    && pip install --upgrade accelerate transformers diffusers huggingface_hub
-
-WORKDIR /root/ai-toolkit/ui
-RUN npm install \
-    && npm cache clean --force
-
-RUN find /root/ai-toolkit -type d -name '.git'        -prune -exec rm -rf {} + \
-    && find /root/ai-toolkit -type d -name '__pycache__' -prune -exec rm -rf {} + \
-    && find /root/ai-toolkit -type f -name '*.pyc'             -delete \
-    && rm -rf /root/.cache /root/.npm /tmp/*
-
-# =======================================================
-# Stage 4a: serverless — slim runtime for RunPod serverless
+# Stage 3a: serverless — slim runtime for RunPod serverless
 #   build with: docker build --target serverless -t <img>:serverless .
 # =======================================================
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS serverless
@@ -174,7 +142,7 @@ WORKDIR /
 CMD ["/start.sh"]
 
 # =======================================================
-# Stage 4b: pod — full-featured runtime (default build target)
+# Stage 3b: pod — full-featured runtime (default build target)
 # =======================================================
 FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS pod
 
@@ -192,13 +160,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # cloud-provider injected at startup
         openssh-server openssh-client htop nano xauth \
         lsb-release systemd systemd-sysv \
-    && curl -fsSL https://deb.nodesource.com/setup_23.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
     && curl -fsSL https://tailscale.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=comfy-builder    /root/ComfyUI    /root/ComfyUI
-COPY --from=aitoolkit-builder /root/ai-toolkit /root/ai-toolkit
+COPY --from=comfy-builder /root/ComfyUI /root/ComfyUI
 
 RUN mkdir -p \
     /root/ComfyUI/models/checkpoints/flux \
