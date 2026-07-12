@@ -40,7 +40,7 @@ WORKDIR /root/ComfyUI
 RUN python3 -m venv venv \
     && . venv/bin/activate \
     && pip install --upgrade pip wheel \
-    && pip install torch torchvision torchaudio --extra-index-url "https://download.pytorch.org/whl/${TORCH_INDEX}" \
+    && pip install torch torchvision torchaudio --index-url "https://download.pytorch.org/whl/${TORCH_INDEX}" \
     && pip install -r requirements.txt \
     && pip install tiktoken sentencepiece triton \
     && pip install runpod requests websocket-client
