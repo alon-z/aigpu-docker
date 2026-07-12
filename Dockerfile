@@ -1,14 +1,13 @@
 # syntax=docker/dockerfile:1.6
 
 # Build args control the CUDA/PyTorch toolchain version.
-# Defaults target Blackwell (sm_120) on CUDA 13.2 / cu128.
-# Override for older hosts: e.g. CUDA_VERSION=12.4.1 UBUNTU_VERSION=22.04
-# TORCH_INDEX=cu124 TORCH_ARCH_LIST=8.9 for an Ada (4090) build on a
-# CUDA 12.4 driver.
+# Defaults target Ampere (sm_86), Ada (sm_89), and Blackwell (sm_120)
+# on CUDA 13.2 / cu128. Override for older hosts, e.g. CUDA_VERSION=12.4.1
+# UBUNTU_VERSION=22.04 TORCH_INDEX=cu124 TORCH_ARCH_LIST="8.6 8.9".
 ARG CUDA_VERSION=13.2.0
 ARG UBUNTU_VERSION=24.04
 ARG TORCH_INDEX=cu128
-ARG TORCH_ARCH_LIST="8.9 12.0"
+ARG TORCH_ARCH_LIST="8.6 8.9 12.0"
 
 # =======================================================
 # Stage 1: base-builder — apt deps shared by builders
@@ -28,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # =======================================================
 # Stage 2: comfy-builder — ComfyUI + SageAttention + nodes
-# Cross-compiles SageAttention for Blackwell sm_120.
+# Cross-compiles SageAttention for the selected GPU architectures.
 # =======================================================
 FROM base-builder AS comfy-builder
 ARG TORCH_INDEX

@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Default variant: CUDA 13.2 / cu128, Blackwell (sm_120).
+          # Default variant: CUDA 13.2 / cu128, Ampere/Ada/Blackwell.
           # Requires host driver >= 580.
           - target: pod
             rolling: latest
@@ -28,39 +28,39 @@ jobs:
             cuda_version: 13.2.0
             ubuntu_version: '24.04'
             torch_index: cu128
-            torch_arch_list: '8.9 12.0'
+            torch_arch_list: '8.6 8.9 12.0'
           - target: serverless
             rolling: serverless
             tag_suffix: ''
             cuda_version: 13.2.0
             ubuntu_version: '24.04'
             torch_index: cu128
-            torch_arch_list: '8.9 12.0'
+            torch_arch_list: '8.6 8.9 12.0'
           # cu124 variant: runs on hosts with CUDA 12.4 drivers (e.g. 550.x).
-          # Targets Ada (sm_89, 4090). Tagged with a -cu124 suffix.
+          # Targets Ampere/Ada (sm_86/sm_89, 3090/4090). Tagged with a -cu124 suffix.
           - target: pod
             rolling: latest
             tag_suffix: '-cu124'
             cuda_version: 12.4.1
             ubuntu_version: '22.04'
             torch_index: cu124
-            torch_arch_list: '8.9'
+            torch_arch_list: '8.6 8.9'
           - target: serverless
             rolling: serverless
             tag_suffix: '-cu124'
             cuda_version: 12.4.1
             ubuntu_version: '22.04'
             torch_index: cu124
-            torch_arch_list: '8.9'
+            torch_arch_list: '8.6 8.9'
           # cu128 variant: runs on hosts with CUDA 12.8 drivers (e.g. 570.x).
-          # Targets Blackwell (sm_120, 5090). Tagged with a -cu128 suffix.
+          # Targets Ampere/Blackwell (sm_86/sm_120, 3090/5090). Tagged with a -cu128 suffix.
           - target: pod
             rolling: latest
             tag_suffix: '-cu128'
             cuda_version: 12.8.1
             ubuntu_version: '22.04'
             torch_index: cu128
-            torch_arch_list: '12.0'
+            torch_arch_list: '8.6 12.0'
 
     steps:
       - uses: actions/checkout@v4
