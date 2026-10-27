@@ -118,6 +118,8 @@ ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-venv \
+        # Triton JIT compiles its CUDA driver helper at runtime.
+        build-essential python3-dev \
         libgl1 libglib2.0-0 libgles2 libegl1 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -160,6 +162,8 @@ ENV PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl wget git ca-certificates gnupg \
         python3 python3-venv python3-pip \
+        # Triton JIT compiles its CUDA driver helper at runtime.
+        build-essential python3-dev \
         libgl1 libglib2.0-0 libgles2 libegl1 aria2 rclone tmux \
         fonts-dejavu-core fonts-liberation vim \
         # cloud-provider injected at startup
