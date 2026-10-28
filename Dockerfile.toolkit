@@ -40,6 +40,8 @@ RUN git init /tmp/SageAttention \
     && mv "${TORCH_EXT}.bak" "$TORCH_EXT" \
     && rm -rf /tmp/SageAttention
 
+COPY toolkit/comfy-constraints.txt /opt/toolkit/comfy-constraints.txt
+ENV PIP_CONSTRAINT=/opt/toolkit/comfy-constraints.txt
 ARG COMFY_REF=7a131a3afadc8200120f67f9236311a2c48b7445
 RUN git init /root/ComfyUI \
     && cd /root/ComfyUI \
@@ -49,7 +51,7 @@ RUN git init /root/ComfyUI \
     && python3 -m venv --system-site-packages venv \
     && venv/bin/python -m pip install --upgrade pip wheel setuptools \
     && venv/bin/python -m pip install -r requirements.txt transformers==4.57.6 av==16.0.1 \
-        tiktoken sentencepiece runpod requests websocket-client
+        tiktoken sentencepiece requests websocket-client
 
 # Conservative defaults for this old-driver profile. Explicit CLI flags still
 # select other attention backends or --enable-dynamic-vram on a capable host.
@@ -71,14 +73,24 @@ RUN set -e; \
         [ -n "$dir" ] || dir=$(basename "$url" .git); \
         git clone --depth=1 "$url" "$dir" || exit 1; \
     done < /tmp/custom_nodes.txt
+# This node later migrated to AlbumentationsX, which conflicts with the
+# Albumentations/albucore pair used by AdvancedLivePortrait in the same venv.
+ARG CONTROLNET_AUX_REF=59b1fc411ede8623b2997855b8018f0b3b6cf49f
+RUN cd comfyui_controlnet_aux \
+    && git fetch --depth=1 origin "${CONTROLNET_AUX_REF}" \
+    && git checkout --detach FETCH_HEAD
 RUN sed -i 's/from comfy.ldm.chroma.layers import DoubleStreamBlock, SingleStreamBlock/from comfy.ldm.flux.layers import DoubleStreamBlock, SingleStreamBlock/' ComfyUI-NAG/chroma/layers.py \
     && sed -i 's/from comfy.ldm.chroma.layers import/from comfy.ldm.flux.layers import/' ComfyUI-NAG/chroma/model.py
 RUN . /root/ComfyUI/venv/bin/activate; \
     for d in */; do \
         if [ -f "$d/requirements.txt" ]; then pip install -r "$d/requirements.txt" || echo "WARNING: requirements failed for $d"; fi; \
         if [ -f "$d/install.py" ]; then python3 "$d/install.py" || echo "WARNING: install.py failed for $d"; fi; \
-    done
+    done; \
+    python3 -m pip check
 
+# Toolkit has its own Albumentations/protobuf requirements, so retain only
+# shared GPU constraints for this environment.
+ENV PIP_CONSTRAINT=/opt/toolkit/torch-constraints.txt
 ARG TOOLKIT_REF=b69b98314557f7c8b08e11bbb14e48d959e6ab26
 RUN git init /root/ai-toolkit \
     && cd /root/ai-toolkit \
@@ -88,7 +100,8 @@ RUN git init /root/ai-toolkit \
     && git submodule update --init --recursive --depth=1 \
     && python3 -m venv --system-site-packages venv \
     && venv/bin/python -m pip install --upgrade pip wheel setuptools \
-    && venv/bin/python -m pip install -r requirements.txt torchcodec==0.15.0+cu126
+    && venv/bin/python -m pip install -r requirements.txt torchcodec==0.15.0+cu126 \
+    && venv/bin/python -m pip check
 
 WORKDIR /root/ai-toolkit
 # Use the upstream portable Node/FFmpeg provisioners, not the GPU-detecting

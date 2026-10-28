@@ -1,0 +1,10 @@
+# ComfyUI/custom-node compatibility set; do not apply to Toolkit's venv.
+-c torch-constraints.txt
+
+# AdvancedLivePortrait and pre-AlbumentationsX ControlNet Aux use this family.
+albumentations==2.0.8
+albucore==0.0.24
+
+# ONNX 1.23 requires protobuf >=6; Google's legacy API client requires <6.
+onnx==1.22.0
+protobuf==5.29.6

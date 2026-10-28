@@ -14,6 +14,9 @@ and build settings are unchanged.
   replacing the shared stack.
 - ComfyUI: `v0.33.4` tag commit `7a131a3afadc8200120f67f9236311a2c48b7445`.
   Its tokenizer dependencies stay separate from Toolkit's Transformers 5 stack.
+  Comfy-only compatibility constraints in `comfy-constraints.txt` keep
+  Albumentations/albucore and ONNX/protobuf consistent across node installs.
+  The RunPod SDK is not installed in this image.
 - AI Toolkit: `b69b98314557f7c8b08e11bbb14e48d959e6ab26`, with
   TorchCodec explicitly installed as `0.15.0+cu126` instead of the PyPI CUDA 13 build.
 - SageAttention: `d1a57a546c3d395b1ffcbeecc66d81db76f3b4b5`, built against
@@ -28,9 +31,11 @@ LoRA-training success is claimed from those primitive tests.
 ComfyUI defaults to PyTorch attention with dynamic VRAM disabled. Its CUDA-13
 Comfy Kitchen kernels are unavailable and its eager fallback must be used.
 Explicit CLI switches can select another attention backend or
-`--enable-dynamic-vram` when testing on a capable host. Custom nodes follow
-`custom_nodes.txt` heads, as in the existing image; their dependency installs
-are best-effort and workflow-specific compatibility still needs checking.
+`--enable-dynamic-vram` when testing on a capable host. ControlNet Aux is pinned
+at `59b1fc411ede8623b2997855b8018f0b3b6cf49f`, before its incompatible
+AlbumentationsX migration. Other custom nodes follow `custom_nodes.txt` heads,
+as in the existing image; their dependency installs are best-effort and
+workflow-specific compatibility still needs checking.
 
 ## Build and checks
 
@@ -42,7 +47,9 @@ docker run --rm --entrypoint /root/ComfyUI/venv/bin/python \
   aigpu-toolkit:test /opt/toolkit/smoke_test.py
 ```
 
-CI builds/loads this variant, runs the CPU import/dependency/shared-stack
+The builder runs `pip check` immediately after each app's dependency installs,
+so conflicts fail before the expensive UI build and final image export.
+CI then builds/loads this variant, runs the CPU import/dependency/shared-stack
 checks and a UI/jobs-API check, then publishes it. Failed checks prevent this
 variant's image tags from being pushed. CI logs include uncompressed image
 size; no size estimate should be treated as a measured result.

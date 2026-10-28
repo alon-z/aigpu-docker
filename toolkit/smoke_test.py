@@ -37,6 +37,14 @@ def main():
     args = parser.parse_args()
     checks = {
         'ComfyUI': """
+from importlib.metadata import distributions
+installed = {dist.metadata['Name'].lower() for dist in distributions()}
+assert 'runpod' not in installed, 'RunPod SDK is not part of this image'
+assert 'albumentationsx' not in installed
+assert version('albumentations') == '2.0.8'
+assert version('albucore') == '0.0.24'
+assert version('onnx') == '1.22.0'
+assert version('protobuf') == '5.29.6'
 from comfy.cli_args import args
 assert args.disable_dynamic_vram and args.use_pytorch_cross_attention
 args.cpu = True
