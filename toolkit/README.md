@@ -54,6 +54,17 @@ checks and a UI/jobs-API check, then publishes it. Failed checks prevent this
 variant's image tags from being pushed. CI logs include uncompressed image
 size; no size estimate should be treated as a measured result.
 
+CPU checks import ComfyUI and TorchCodec, but explicitly skip Toolkit's model
+registry/Krea2 import: upstream eagerly imports OmniGen2, which queries CUDA
+device properties at import time. `--gpu` retains this import check. A CPU-only
+CI pass does not certify Toolkit's model registry or training on a GPU.
+
+Check CPU/GPU smoke-test routing on the **host**, without either app installed:
+
+```bash
+python3 toolkit/test_smoke_test.py
+```
+
 Run on a **GPU host** after pulling the image:
 
 ```bash
@@ -61,8 +72,8 @@ docker run --rm --gpus all --entrypoint /root/ComfyUI/venv/bin/python \
   ghcr.io/alon-z/aigpu-docker:toolkit-cu124 /opt/toolkit/smoke_test.py --gpu
 ```
 
-This adds BF16 attention/backward, Triton execution, SageAttention GPU-kernel,
-and AdamW8bit optimizer checks. A real ComfyUI workflow and a short training
+This adds Toolkit model-registry/Krea2 imports, BF16 attention/backward,
+Triton execution, SageAttention GPU-kernel, and AdamW8bit optimizer checks. A real ComfyUI workflow and a short training
 job are still required before relying on the image for either workload.
 
 ## Startup and access

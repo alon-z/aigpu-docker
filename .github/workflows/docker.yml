@@ -75,6 +75,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check Toolkit smoke-test routing
+        if: matrix.target == 'toolkit'
+        run: python3 toolkit/test_smoke_test.py
+
       - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \

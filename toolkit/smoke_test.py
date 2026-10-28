@@ -54,9 +54,8 @@ print('PASS ComfyUI core and SageAttention imports')
 """,
         'ai-toolkit': """
 import torchcodec
-from extensions_built_in.diffusion_models.krea2.krea2 import Krea2Model
 assert version('torchcodec') == '0.15.0+cu126'
-print('PASS TorchCodec and Toolkit Krea2 imports')
+print('PASS TorchCodec import')
 """,
     }
     for app, check in checks.items():
@@ -74,7 +73,11 @@ assert out.shape == q.shape and torch.isfinite(out).all()
 print('PASS SageAttention GPU kernel')
 """
             else:
+                # The upstream registry eagerly imports OmniGen2, which queries
+                # CUDA device properties at import time even when testing Krea2.
                 code += """
+from extensions_built_in.diffusion_models.krea2.krea2 import Krea2Model
+print('PASS Toolkit model-registry and Krea2 imports')
 import bitsandbytes as bnb
 p = torch.nn.Parameter(torch.randn(128, 128, device='cuda'))
 optimizer = bnb.optim.AdamW8bit([p])
@@ -84,6 +87,8 @@ assert torch.isfinite(p).all()
 print('PASS AdamW8bit GPU optimizer step')
 """
         subprocess.run([str(python), '-c', code], cwd=directory, check=True)
+        if app == 'ai-toolkit' and not args.gpu:
+            print('SKIP GPU-dependent Toolkit model-registry/Krea2 import; run with --gpu', flush=True)
 
 
 if __name__ == '__main__':
