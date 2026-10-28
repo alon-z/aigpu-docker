@@ -61,6 +61,16 @@ jobs:
             ubuntu_version: '22.04'
             torch_index: cu128
             torch_arch_list: '8.6 12.0'
+          # Experimental shared-stack image for 3090/4090 hosts on driver 550.x.
+          # CUDA 12.4 base, pinned PyTorch cu126; GPU validation is separate.
+          - target: toolkit
+            dockerfile: Dockerfile.toolkit
+            rolling: toolkit
+            tag_suffix: '-cu124'
+            cuda_version: 12.4.1
+            ubuntu_version: '22.04'
+            torch_index: cu126
+            torch_arch_list: '8.6 8.9'
 
     steps:
       - uses: actions/checkout@v4
@@ -109,8 +119,10 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ${{ matrix.dockerfile || 'Dockerfile' }}
           target: ${{ matrix.target }}
-          push: true
+          push: ${{ matrix.target != 'toolkit' }}
+          load: ${{ matrix.target == 'toolkit' }}
           platforms: linux/amd64
           build-args: |
             CUDA_VERSION=${{ matrix.cuda_version }}
@@ -126,3 +138,37 @@ jobs:
             type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:${{ matrix.rolling }}${{ matrix.tag_suffix }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ steps.img.outputs.name }}:buildcache-${{ matrix.target }}${{ matrix.tag_suffix }},mode=max,compression=zstd,image-manifest=true,oci-mediatypes=true
           provenance: false
+
+      - name: Check Toolkit image before publishing
+        if: matrix.target == 'toolkit'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          image="${IMAGE_TAGS%%$'\n'*}"
+          docker run --rm --entrypoint /root/ComfyUI/venv/bin/python "$image" /opt/toolkit/smoke_test.py
+          docker run --rm --entrypoint /bin/bash "$image" -c '
+            set -e
+            cd /root/ai-toolkit/ui
+            npm run start > /tmp/ui.log 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            for attempt in {1..30}; do
+              if curl --fail --silent http://127.0.0.1:8675/api/jobs > /tmp/jobs.json; then
+                python3 -c "import json; assert json.load(open(\"/tmp/jobs.json\")) == {\"jobs\": []}"
+                exit 0
+              fi
+              sleep 2
+            done
+            tail -n 30 /tmp/ui.log
+            exit 1
+          '
+          docker image inspect --format='Uncompressed image size: {{.Size}} bytes' "$image"
+
+      - name: Publish checked Toolkit image
+        if: matrix.target == 'toolkit'
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r image; do
+            docker push "$image"
+          done <<< "$IMAGE_TAGS"
